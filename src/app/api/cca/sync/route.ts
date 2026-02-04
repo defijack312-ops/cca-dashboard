@@ -39,10 +39,11 @@ async function getLastProcessedBlock(sb: any): Promise<bigint> {
 }
 
 async function saveLastProcessedBlock(sb: any, block: bigint) {
-  await sb.from("cca_sync_state").upsert(
+  const { error } = await sb.from("cca_sync_state").upsert(
     { key: SYNC_STATE_KEY, last_block: Number(block), updated_at: new Date().toISOString() },
     { onConflict: "key" }
   );
+  if (error) console.error("SAVE BLOCK ERROR:", JSON.stringify(error));
 }
 
 function computeMedian(values: number[]): number {
@@ -179,7 +180,10 @@ export async function GET(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }, { onConflict: "id" });
 
-    await saveLastProcessedBlock(supabase, finalBlock);
+    const saveResult = await supabase.from("cca_sync_state").upsert(
+      { key: SYNC_STATE_KEY, last_block: Number(finalBlock), updated_at: new Date().toISOString() },
+      { onConflict: "key" }
+    );
 
     return NextResponse.json({
       success: true,
@@ -189,6 +193,8 @@ export async function GET(request: NextRequest) {
       totalTransfersInDb: totalBids,
       currentBlock: Number(currentBlock),
       caughtUp: finalBlock >= currentBlock,
+      savedBlock: Number(finalBlock),
+      saveError: saveResult.error ? saveResult.error.message : null,
     });
   } catch (err: unknown) {
     console.error("Sync error:", err);
