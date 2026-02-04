@@ -1,8 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/cca/sync?secret=rnbw-cca-super-secret-123",
-      "schedule": "*/15 * * * *"
-    }
-  ]
 }
