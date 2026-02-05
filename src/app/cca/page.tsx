@@ -15,9 +15,10 @@ interface Stats {
   unique_wallets: number;
   avg_bid: number;
   median_bid: number;
-  pct_under_50: number;
-  pct_under_100: number;
-  top_10_share: number;
+  pct_bids_lt_50: number;
+  pct_bids_lt_100: number;
+  top10_share: number;
+  top50_share: number;
   updated_at: string;
 }
 
@@ -75,7 +76,7 @@ export default function CCADashboard() {
       const { data: statsData } = await supabase
         .from("cca_stats_latest")
         .select("*")
-        .eq("id", "latest")
+        .eq("id", "base_usdc_to_cca")
         .single();
 
       if (statsData) {
@@ -166,21 +167,21 @@ export default function CCADashboard() {
         },
         {
           label: "Bids < $50",
-          value: formatPct(stats.pct_under_50),
+          value: formatPct(stats.pct_bids_lt_50),
           accent: "from-sky-500 to-indigo-600",
           glow: "shadow-sky-500/20",
           icon: "▽",
         },
         {
           label: "Bids < $100",
-          value: formatPct(stats.pct_under_100),
+          value: formatPct(stats.pct_bids_lt_100),
           accent: "from-lime-500 to-green-600",
           glow: "shadow-lime-500/20",
           icon: "□",
         },
         {
           label: "Top 10 Share",
-          value: formatPct(stats.top_10_share),
+          value: formatPct(stats.top10_share),
           accent: "from-red-500 to-orange-600",
           glow: "shadow-red-500/20",
           icon: "★",

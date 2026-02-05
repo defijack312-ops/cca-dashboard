@@ -15,8 +15,10 @@ const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
 const USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
 const CHUNK_SIZE = 10;        // Alchemy free tier limit
-const CHUNKS_PER_CALL = 100;  // Process up to 1000 blocks per API call
-const SYNC_STATE_KEY = "cca_usdc_sync";
+const CHUNKS_PER_CALL = 20;   // Process 200 blocks per API call (avoid rate limits)
+const SYNC_STATE_ID = "base_usdc_to_cca";
+// Contract was deployed at block ~41610525
+const GENESIS_BLOCK = BigInt(41610000);
 
 function getSupabaseAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -33,15 +35,18 @@ function getViemClient() {
 
 async function getLastProcessedBlock(sb: any): Promise<bigint> {
   const { data, error } = await sb
-    .from("cca_sync_state").select("last_block").eq("key", SYNC_STATE_KEY).single();
+    .from("cca_sync_state")
+    .select("last_processed_block")
+    .eq("id", SYNC_STATE_ID)
+    .single();
   if (error || !data) return BigInt(0);
-  return BigInt(Number(data.last_block));
+  return BigInt(Number(data.last_processed_block));
 }
 
 async function saveLastProcessedBlock(sb: any, block: bigint) {
   const { error } = await sb.from("cca_sync_state").upsert(
-    { key: SYNC_STATE_KEY, last_block: Number(block), updated_at: new Date().toISOString() },
-    { onConflict: "key" }
+    { id: SYNC_STATE_ID, last_processed_block: Number(block), updated_at: new Date().toISOString() },
+    { onConflict: "id" }
   );
   if (error) console.error("SAVE BLOCK ERROR:", JSON.stringify(error));
 }
@@ -67,14 +72,16 @@ export async function GET(request: NextRequest) {
     const lastProcessedBlock = await getLastProcessedBlock(supabase);
     const currentBlock = await viemClient.getBlockNumber();
 
+    // Start from genesis block if no progress, otherwise resume
     let cursor = lastProcessedBlock === BigInt(0)
-      ? currentBlock - BigInt(10000)
+      ? GENESIS_BLOCK
       : lastProcessedBlock + BigInt(1);
 
     if (cursor > currentBlock) {
       return NextResponse.json({
         success: true, message: "Already up to date",
-        currentBlock: Number(currentBlock), lastProcessedBlock: Number(lastProcessedBlock),
+        currentBlock: Number(currentBlock),
+        lastProcessedBlock: Number(lastProcessedBlock),
       });
     }
 
@@ -163,38 +170,44 @@ export async function GET(request: NextRequest) {
 
     const sortedWallets = Array.from(walletMap.entries()).sort((a, b) => b[1].total - a[1].total);
     const top10Total = sortedWallets.slice(0, 10).reduce((sum, [, d]) => sum + d.total, 0);
+    const top50Total = sortedWallets.slice(0, 50).reduce((sum, [, d]) => sum + d.total, 0);
     const bidsUnder50 = allAmounts.filter((v) => v < 50).length;
     const bidsUnder100 = allAmounts.filter((v) => v < 100).length;
 
+    // Use actual Supabase column names
     await supabase.from("cca_stats_latest").upsert({
-      id: "latest",
+      id: SYNC_STATE_ID,
       total_usdc: totalUsdc,
       total_bids: totalBids,
       unique_wallets: walletMap.size,
       avg_bid: avgBid,
       median_bid: computeMedian(allAmounts),
-      pct_under_50: totalBids > 0 ? (bidsUnder50 / totalBids) * 100 : 0,
-      pct_under_100: totalBids > 0 ? (bidsUnder100 / totalBids) * 100 : 0,
-      top_10_share: totalUsdc > 0 ? (top10Total / totalUsdc) * 100 : 0,
-      last_block: Number(finalBlock),
+      pct_bids_lt_50: totalBids > 0 ? (bidsUnder50 / totalBids) * 100 : 0,
+      pct_bids_lt_100: totalBids > 0 ? (bidsUnder100 / totalBids) * 100 : 0,
+      top10_share: totalUsdc > 0 ? (top10Total / totalUsdc) * 100 : 0,
+      top50_share: totalUsdc > 0 ? (top50Total / totalUsdc) * 100 : 0,
+      last_processed_block: Number(finalBlock),
       updated_at: new Date().toISOString(),
     }, { onConflict: "id" });
 
-    const saveResult = await supabase.from("cca_sync_state").upsert(
-      { key: SYNC_STATE_KEY, last_block: Number(finalBlock), updated_at: new Date().toISOString() },
-      { onConflict: "key" }
-    );
+    // Save sync cursor
+    await saveLastProcessedBlock(supabase, finalBlock);
 
+    const blocksRemaining = Number(currentBlock) - Number(finalBlock);
     return NextResponse.json({
       success: true,
       blocksScanned: chunksProcessed * CHUNK_SIZE,
-      blockRange: { from: Number(lastProcessedBlock === BigInt(0) ? currentBlock - BigInt(10000) : lastProcessedBlock + BigInt(1)), to: Number(finalBlock) },
+      blockRange: {
+        from: Number(lastProcessedBlock === BigInt(0) ? GENESIS_BLOCK : lastProcessedBlock + BigInt(1)),
+        to: Number(finalBlock),
+      },
       newTransfers: newTransfers.length,
       totalTransfersInDb: totalBids,
       currentBlock: Number(currentBlock),
       caughtUp: finalBlock >= currentBlock,
       savedBlock: Number(finalBlock),
-      saveError: saveResult.error ? saveResult.error.message : null,
+      blocksRemaining,
+      estimatedCallsRemaining: Math.ceil(blocksRemaining / (CHUNKS_PER_CALL * CHUNK_SIZE)),
     });
   } catch (err: unknown) {
     console.error("Sync error:", err);
