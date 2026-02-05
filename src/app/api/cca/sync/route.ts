@@ -301,7 +301,7 @@ export async function GET(request: NextRequest) {
       .select("address")
       .is("ens_name", null)
       .order("total_usdc", { ascending: false })
-      .limit(250); // Resolve top 250 by value each sync (covers full leaderboard)
+      .limit(500); // Resolve up to 500 unchecked wallets per sync
 
     if (unresolvedWallets && unresolvedWallets.length > 0) {
       const mainnetClient = getMainnetClient();
