@@ -68,6 +68,7 @@ export default function CCADashboard() {
   const [searchResult, setSearchResult] = useState<{ found: boolean; rank?: number; message?: string } | null>(null);
   const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
   const [auctionTimeLeft, setAuctionTimeLeft] = useState<{ h: number; m: number; s: number; ended: boolean }>({ h: 0, m: 0, s: 0, ended: false });
+  const [polymarketOdds, setPolymarketOdds] = useState<{ question: string; yesOdds: number; slug: string }[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -95,6 +96,20 @@ export default function CCADashboard() {
   }, []);
 
   useEffect(() => { fetchData(); const i = setInterval(fetchData, 60_000); return () => clearInterval(i); }, [fetchData]);
+
+  // Fetch Polymarket odds
+  useEffect(() => {
+    const fetchOdds = async () => {
+      try {
+        const res = await fetch("/api/polymarket");
+        const data = await res.json();
+        if (data.markets?.length) setPolymarketOdds(data.markets);
+      } catch (e) { console.error("Polymarket fetch error:", e); }
+    };
+    fetchOdds();
+    const i = setInterval(fetchOdds, 60_000);
+    return () => clearInterval(i);
+  }, []);
   useEffect(() => { const t = setInterval(() => setCountdown((p) => (p > 0 ? p - 1 : 60)), 1000); return () => clearInterval(t); }, []);
 
   // Auction ends at 10:00 AM EST Feb 5, 2026 = 15:00 UTC
@@ -150,7 +165,7 @@ export default function CCADashboard() {
     );
   }
 
-  const statCards = stats
+  const statCards: { label: string; value: string; accent: string; glow: string; icon: string; href?: string }[] = stats
     ? [
         { label: "Total USDC", value: formatUsd(stats.total_usdc), accent: "from-red-500 to-orange-500", glow: "shadow-red-500/20", icon: "◆" },
         { label: "Total Bids", value: formatNumber(stats.total_bids), accent: "from-orange-500 to-yellow-500", glow: "shadow-orange-500/20", icon: "▲" },
@@ -160,6 +175,33 @@ export default function CCADashboard() {
         { label: "Bids < $50", value: formatPct(stats.pct_bids_lt_50), accent: "from-blue-500 to-indigo-500", glow: "shadow-blue-500/20", icon: "▽" },
         { label: "Bids < $100", value: formatPct(stats.pct_bids_lt_100), accent: "from-indigo-500 to-violet-500", glow: "shadow-indigo-500/20", icon: "□" },
         { label: "Top 10 Share", value: formatPct(stats.top10_share), accent: "from-violet-500 to-fuchsia-500", glow: "shadow-violet-500/20", icon: "★" },
+        ...(polymarketOdds.length >= 1
+          ? [{
+              label: `FDV > ${polymarketOdds[0].question}`,
+              value: `${polymarketOdds[0].yesOdds}%`,
+              accent: "from-fuchsia-500 to-pink-500",
+              glow: "shadow-fuchsia-500/20",
+              icon: "📈",
+              href: `https://polymarket.com/event/rainbow-fdv-above-one-day-after-launch-676/${polymarketOdds[0].slug}`,
+            }]
+          : []),
+        ...(polymarketOdds.length >= 2
+          ? [{
+              label: `FDV > ${polymarketOdds[1].question}`,
+              value: `${polymarketOdds[1].yesOdds}%`,
+              accent: "from-pink-500 to-rose-500",
+              glow: "shadow-pink-500/20",
+              icon: "📈",
+              href: `https://polymarket.com/event/rainbow-fdv-above-one-day-after-launch-676/${polymarketOdds[1].slug}`,
+            }]
+          : []),
+        {
+          label: "% of $500K Raised",
+          value: `${(stats.total_usdc / 500_000 * 100).toFixed(1)}%`,
+          accent: "from-rose-500 to-red-500",
+          glow: "shadow-rose-500/20",
+          icon: "🎯",
+        },
       ]
     : [];
 
@@ -308,36 +350,46 @@ export default function CCADashboard() {
         {/* ── Stat Cards ─────────────────────────────────── */}
         {stats ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-10">
-            {statCards.map((card) => (
-              <div
-                key={card.label}
-                className={`
-                  relative overflow-hidden rounded-xl 
-                  bg-gradient-to-br from-[#0f1f3a]/80 to-[#0a1628]/40
-                  border border-blue-900/40
-                  backdrop-blur-sm
-                  shadow-lg ${card.glow}
-                  hover:border-blue-800/60 hover:shadow-xl
-                  transition-all duration-300
-                  group
-                `}
-              >
-                <div
-                  className={`h-0.5 bg-gradient-to-r ${card.accent} opacity-60 group-hover:opacity-100 transition-opacity`}
-                />
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-gray-500">
-                      {card.label}
-                    </span>
-                    <span className="text-blue-900 text-sm">{card.icon}</span>
+            {statCards.map((card) => {
+              const Wrapper = card.href ? "a" : "div";
+              const wrapperProps = card.href
+                ? { href: card.href, target: "_blank", rel: "noopener noreferrer" }
+                : {};
+              return (
+                <Wrapper
+                  key={card.label}
+                  {...(wrapperProps as any)}
+                  className={`
+                    relative overflow-hidden rounded-xl 
+                    bg-gradient-to-br from-[#0f1f3a]/80 to-[#0a1628]/40
+                    border border-blue-900/40
+                    backdrop-blur-sm
+                    shadow-lg ${card.glow}
+                    hover:border-blue-800/60 hover:shadow-xl
+                    transition-all duration-300
+                    group ${card.href ? "cursor-pointer" : ""}
+                  `}
+                >
+                  <div
+                    className={`h-0.5 bg-gradient-to-r ${card.accent} opacity-60 group-hover:opacity-100 transition-opacity`}
+                  />
+                  <div className="p-4 sm:p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-gray-500">
+                        {card.label}
+                      </span>
+                      <span className="text-blue-900 text-sm">{card.icon}</span>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                      {card.value}
+                    </div>
+                    {card.href && (
+                      <div className="text-[9px] font-mono text-gray-600 mt-1 tracking-wider">POLYMARKET ↗</div>
+                    )}
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                    {card.value}
-                  </div>
-                </div>
-              </div>
-            ))}
+                </Wrapper>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-12 text-gray-600 font-mono text-sm">
