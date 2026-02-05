@@ -23,10 +23,10 @@ interface Stats {
 }
 
 interface WalletRow {
-  wallet: string;
+  address: string;
   total_usdc: number;
   bid_count: number;
-  avg_bid: number;
+  last_bid_time: string | null;
 }
 
 // ─── Helper: Format numbers nicely ──────────────────────────
@@ -85,7 +85,7 @@ export default function CCADashboard() {
 
       const { data: walletData } = await supabase
         .from("cca_wallets")
-        .select("wallet, total_usdc, bid_count, avg_bid")
+        .select("address, total_usdc, bid_count, last_bid_time")
         .order("total_usdc", { ascending: false })
         .limit(25);
 
@@ -296,7 +296,7 @@ export default function CCADashboard() {
                     <th className="px-5 py-3 text-left">Wallet</th>
                     <th className="px-5 py-3 text-right">Total USDC</th>
                     <th className="px-5 py-3 text-right">Bids</th>
-                    <th className="px-5 py-3 text-right">Avg Bid</th>
+                    <th className="px-5 py-3 text-right">Last Bid</th>
                     <th className="px-5 py-3 text-right">Share</th>
                   </tr>
                 </thead>
@@ -310,7 +310,7 @@ export default function CCADashboard() {
 
                     return (
                       <tr
-                        key={wallet.wallet}
+                        key={wallet.address}
                         className="hover:bg-gray-800/30 transition-colors group"
                       >
                         <td className="px-5 py-3.5">
@@ -329,13 +329,13 @@ export default function CCADashboard() {
                         </td>
                         <td className="px-5 py-3.5">
                           <a
-                            href={`https://basescan.org/address/${wallet.wallet}`}
+                            href={`https://basescan.org/address/${wallet.address}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-mono text-sm text-gray-400 hover:text-cyan-400 transition-colors"
-                            title={wallet.wallet}
+                            title={wallet.address}
                           >
-                            {shortenAddress(wallet.wallet)}
+                            {shortenAddress(wallet.address)}
                             <span className="text-gray-700 group-hover:text-gray-500 ml-1.5 text-[10px]">
                               ↗
                             </span>
@@ -354,7 +354,7 @@ export default function CCADashboard() {
                           {formatNumber(wallet.bid_count)}
                         </td>
                         <td className="px-5 py-3.5 text-right font-mono text-sm text-gray-500">
-                          {formatUsd(wallet.avg_bid)}
+                          {wallet.last_bid_time ? timeAgo(wallet.last_bid_time) : "—"}
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">

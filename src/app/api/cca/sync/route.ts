@@ -127,9 +127,10 @@ export async function GET(request: NextRequest) {
             newTransfers.push({
               tx_hash: log.transactionHash,
               block_number: Number(log.blockNumber),
-              wallet: from.toLowerCase(),
-              usdc_amount: usdcAmount,
-              timestamp: new Date().toISOString(),
+              from_address: from.toLowerCase(),
+              to_address: CCA_CONTRACT.toLowerCase(),
+              amount_usdc: usdcAmount,
+              block_time: new Date().toISOString(), // approximate; updated below if block data available
             });
           }
           success = true;
@@ -171,30 +172,33 @@ export async function GET(request: NextRequest) {
 
     // Aggregate per-wallet stats
     const { data: allTransfers } = await supabase
-      .from("cca_transfers").select("wallet, usdc_amount");
+      .from("cca_transfers").select("from_address, amount_usdc, block_time");
 
-    const transfers = (allTransfers || []) as { wallet: string; usdc_amount: number }[];
-    const walletMap = new Map<string, { total: number; count: number }>();
+    const transfers = (allTransfers || []) as { from_address: string; amount_usdc: number; block_time: string }[];
+    const walletMap = new Map<string, { total: number; count: number; lastBidTime: string }>();
     for (const t of transfers) {
-      const existing = walletMap.get(t.wallet) || { total: 0, count: 0 };
-      existing.total += t.usdc_amount;
+      const existing = walletMap.get(t.from_address) || { total: 0, count: 0, lastBidTime: "" };
+      existing.total += t.amount_usdc;
       existing.count += 1;
-      walletMap.set(t.wallet, existing);
+      if (t.block_time > existing.lastBidTime) existing.lastBidTime = t.block_time;
+      walletMap.set(t.from_address, existing);
     }
 
-    const walletRows = Array.from(walletMap.entries()).map(([wallet, data]) => ({
-      wallet, total_usdc: data.total, bid_count: data.count,
-      avg_bid: data.total / data.count, updated_at: new Date().toISOString(),
+    const walletRows = Array.from(walletMap.entries()).map(([address, data]) => ({
+      address,
+      total_usdc: data.total,
+      bid_count: data.count,
+      last_bid_time: data.lastBidTime || null,
     }));
 
     if (walletRows.length > 0) {
       for (let i = 0; i < walletRows.length; i += 500) {
-        await supabase.from("cca_wallets").upsert(walletRows.slice(i, i + 500), { onConflict: "wallet" });
+        await supabase.from("cca_wallets").upsert(walletRows.slice(i, i + 500), { onConflict: "address" });
       }
     }
 
     // Compute global stats
-    const allAmounts = transfers.map((t) => t.usdc_amount);
+    const allAmounts = transfers.map((t) => t.amount_usdc);
     const totalUsdc = allAmounts.reduce((sum, v) => sum + v, 0);
     const totalBids = allAmounts.length;
     const avgBid = totalBids > 0 ? totalUsdc / totalBids : 0;
