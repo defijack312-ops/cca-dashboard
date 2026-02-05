@@ -290,6 +290,18 @@ export default function CCADashboard() {
             >
               Bid on Uniswap ↗
             </a>
+            <span className="text-gray-700">·</span>
+            <span className="text-gray-500">
+              donate ETH/Base:{" "}
+              <a
+                href="https://basescan.org/address/0x7d8b958786261f0b48e4f7b55787f5f2dad8f114"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-400/70 hover:text-orange-400 transition-colors"
+              >
+                0x7d8b...f114
+              </a>
+            </span>
           </div>
         </div>
 
