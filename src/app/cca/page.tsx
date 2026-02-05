@@ -270,7 +270,7 @@ export default function CCADashboard() {
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-4 text-xs font-mono text-gray-600">
+          <div className="mt-3 flex items-center gap-4 text-xs font-mono font-semibold text-gray-500">
             {lastFetch && (
               <span>Updated {timeAgo(lastFetch.toISOString())}</span>
             )}
