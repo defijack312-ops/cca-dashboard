@@ -67,6 +67,7 @@ export default function CCADashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<{ found: boolean; rank?: number; message?: string } | null>(null);
   const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
+  const [auctionTimeLeft, setAuctionTimeLeft] = useState<{ h: number; m: number; s: number; ended: boolean }>({ h: 0, m: 0, s: 0, ended: false });
 
   const fetchData = useCallback(async () => {
     try {
@@ -95,6 +96,25 @@ export default function CCADashboard() {
 
   useEffect(() => { fetchData(); const i = setInterval(fetchData, 60_000); return () => clearInterval(i); }, [fetchData]);
   useEffect(() => { const t = setInterval(() => setCountdown((p) => (p > 0 ? p - 1 : 60)), 1000); return () => clearInterval(t); }, []);
+
+  // Auction ends at 10:00 AM EST Feb 5, 2026 = 15:00 UTC
+  useEffect(() => {
+    const AUCTION_END = new Date("2026-02-05T15:00:00Z").getTime();
+    const tick = () => {
+      const diff = AUCTION_END - Date.now();
+      if (diff <= 0) {
+        setAuctionTimeLeft({ h: 0, m: 0, s: 0, ended: true });
+      } else {
+        const h = Math.floor(diff / 3_600_000);
+        const m = Math.floor((diff % 3_600_000) / 60_000);
+        const s = Math.floor((diff % 60_000) / 1000);
+        setAuctionTimeLeft({ h, m, s, ended: false });
+      }
+    };
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => clearInterval(i);
+  }, []);
 
   const handleSearch = () => {
     const q = searchQuery.trim().toLowerCase();
@@ -164,32 +184,92 @@ export default function CCADashboard() {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* ── Header ─────────────────────────────────────── */}
         <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
-            <span className="text-xs font-mono text-gray-500 tracking-[0.25em] uppercase">
-              Live · Base Network
-            </span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            <a
-              href={AUCTION_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:opacity-80 transition-opacity"
-            >
-              <span
-                className="bg-clip-text text-transparent"
+          <div className="flex items-start justify-between gap-4">
+            {/* Left side — title */}
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-xs font-mono text-gray-500 tracking-[0.25em] uppercase">
+                  Live · Base Network
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+                <a
+                  href={AUCTION_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:opacity-80 transition-opacity"
+                >
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage: "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #8b5cf6)",
+                    }}
+                  >
+                    $RNBW CCA
+                  </span>
+                </a>
+                <span className="text-gray-500 ml-3 text-2xl font-light">
+                  Auction Dashboard
+                </span>
+              </h1>
+            </div>
+
+            {/* Right side — auction countdown */}
+            <div className="flex-shrink-0">
+              <div
+                className="rounded-xl border overflow-hidden"
                 style={{
-                  backgroundImage: "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #8b5cf6)",
+                  borderColor: auctionTimeLeft.ended ? "rgba(239,68,68,0.4)" : "rgba(234,179,8,0.3)",
+                  background: "linear-gradient(135deg, rgba(15,31,58,0.9), rgba(10,22,40,0.9))",
                 }}
               >
-                $RNBW CCA
-              </span>
-            </a>
-            <span className="text-gray-500 ml-3 text-2xl font-light">
-              Auction Dashboard
-            </span>
-          </h1>
+                <div
+                  className="h-0.5"
+                  style={{
+                    background: auctionTimeLeft.ended
+                      ? "#ef4444"
+                      : "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6)",
+                  }}
+                />
+                <div className="px-4 py-3 text-center">
+                  <div className="text-[10px] font-mono tracking-[0.2em] uppercase text-gray-500 mb-1.5">
+                    {auctionTimeLeft.ended ? "Auction Ended" : "Auction Ends In"}
+                  </div>
+                  {auctionTimeLeft.ended ? (
+                    <div className="text-lg font-bold font-mono text-red-400">
+                      ENDED
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 font-mono">
+                      <div className="text-center">
+                        <span className="text-2xl font-bold text-white">{String(auctionTimeLeft.h).padStart(2, "0")}</span>
+                        <span className="text-[9px] block text-gray-600 -mt-0.5">HRS</span>
+                      </div>
+                      <span className="text-yellow-500 text-xl font-bold -mt-3">:</span>
+                      <div className="text-center">
+                        <span className="text-2xl font-bold text-white">{String(auctionTimeLeft.m).padStart(2, "0")}</span>
+                        <span className="text-[9px] block text-gray-600 -mt-0.5">MIN</span>
+                      </div>
+                      <span className="text-yellow-500 text-xl font-bold -mt-3">:</span>
+                      <div className="text-center">
+                        <span
+                          className="text-2xl font-bold bg-clip-text text-transparent"
+                          style={{
+                            backgroundImage: "linear-gradient(90deg, #f97316, #eab308)",
+                          }}
+                        >
+                          {String(auctionTimeLeft.s).padStart(2, "0")}
+                        </span>
+                        <span className="text-[9px] block text-gray-600 -mt-0.5">SEC</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-3 flex items-center gap-4 text-xs font-mono text-gray-600">
             {lastFetch && (
               <span>Updated {timeAgo(lastFetch.toISOString())}</span>
