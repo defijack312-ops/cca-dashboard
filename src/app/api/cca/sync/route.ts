@@ -15,7 +15,7 @@ const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
 const USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
 const CHUNK_SIZE = 10;        // Alchemy free tier limit
-const CHUNKS_PER_CALL = 20;   // Process 200 blocks per API call (avoid rate limits)
+const CHUNKS_PER_CALL = 50;   // Process 500 blocks per API call
 const SYNC_STATE_ID = "base_usdc_to_cca";
 // Contract was deployed at block ~41610525
 const GENESIS_BLOCK = BigInt(41610000);
@@ -89,43 +89,65 @@ export async function GET(request: NextRequest) {
       "event Transfer(address indexed from, address indexed to, uint256 value)"
     );
 
-    // Loop through 10-block chunks
+    // Loop through 10-block chunks with rate limit handling
     const newTransfers: any[] = [];
     let chunksProcessed = 0;
+    let rateLimitHits = 0;
 
     while (cursor <= currentBlock && chunksProcessed < CHUNKS_PER_CALL) {
       const chunkEnd = cursor + BigInt(CHUNK_SIZE) > currentBlock
         ? currentBlock
         : cursor + BigInt(CHUNK_SIZE);
 
-      try {
-        const logs = await viemClient.getLogs({
-          address: USDC_CONTRACT as `0x${string}`,
-          event: transferEvent,
-          args: { to: CCA_CONTRACT as `0x${string}` },
-          fromBlock: cursor,
-          toBlock: chunkEnd,
-        });
-
-        for (const log of logs) {
-          const from = log.args.from as string;
-          const rawValue = log.args.value as bigint;
-          const usdcAmount = parseFloat(formatUnits(rawValue, USDC_DECIMALS));
-          newTransfers.push({
-            tx_hash: log.transactionHash,
-            block_number: Number(log.blockNumber),
-            wallet: from.toLowerCase(),
-            usdc_amount: usdcAmount,
-            raw_amount: rawValue.toString(),
-            timestamp: new Date().toISOString(),
+      let success = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const logs = await viemClient.getLogs({
+            address: USDC_CONTRACT as `0x${string}`,
+            event: transferEvent,
+            args: { to: CCA_CONTRACT as `0x${string}` },
+            fromBlock: cursor,
+            toBlock: chunkEnd,
           });
+
+          for (const log of logs) {
+            const from = log.args.from as string;
+            const rawValue = log.args.value as bigint;
+            const usdcAmount = parseFloat(formatUnits(rawValue, USDC_DECIMALS));
+            newTransfers.push({
+              tx_hash: log.transactionHash,
+              block_number: Number(log.blockNumber),
+              wallet: from.toLowerCase(),
+              usdc_amount: usdcAmount,
+              raw_amount: rawValue.toString(),
+              timestamp: new Date().toISOString(),
+            });
+          }
+          success = true;
+          break;
+        } catch (e: any) {
+          if (e?.message?.includes("429") || e?.message?.includes("Too Many")) {
+            rateLimitHits++;
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          } else {
+            console.error(`Error fetching logs for blocks ${cursor}-${chunkEnd}:`, e?.message);
+            break;
+          }
         }
-      } catch (e: any) {
-        console.error(`Error fetching logs for blocks ${cursor}-${chunkEnd}:`, e?.message);
+      }
+
+      if (!success && rateLimitHits >= 3) {
+        // Save progress and bail — caller can retry
+        break;
       }
 
       cursor = chunkEnd + BigInt(1);
       chunksProcessed++;
+
+      // Small delay every 10 chunks to stay under rate limits
+      if (chunksProcessed % 10 === 0) {
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
 
     const finalBlock = cursor - BigInt(1);
