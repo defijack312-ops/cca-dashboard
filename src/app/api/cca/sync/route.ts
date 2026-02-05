@@ -162,8 +162,33 @@ export async function GET(request: NextRequest) {
 
     const finalBlock = cursor - BigInt(1);
 
-    // Insert new transfers
+    // Fetch real block timestamps for new transfers
     if (newTransfers.length > 0) {
+      const uniqueBlocks = [...new Set(newTransfers.map((t: any) => t.block_number))];
+      const blockTimestamps = new Map<number, string>();
+
+      // Batch fetch block timestamps (with rate limit protection)
+      for (let i = 0; i < uniqueBlocks.length; i++) {
+        try {
+          const block = await viemClient.getBlock({ blockNumber: BigInt(uniqueBlocks[i]) });
+          blockTimestamps.set(uniqueBlocks[i], new Date(Number(block.timestamp) * 1000).toISOString());
+        } catch {
+          // Fallback: estimate from Base's ~2s block time
+          const blocksAgo = Number(currentBlock) - uniqueBlocks[i];
+          const estimatedTime = new Date(Date.now() - blocksAgo * 2000).toISOString();
+          blockTimestamps.set(uniqueBlocks[i], estimatedTime);
+        }
+        // Small delay every 20 block fetches
+        if (i > 0 && i % 20 === 0) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      // Apply real timestamps
+      for (const t of newTransfers) {
+        t.block_time = blockTimestamps.get(t.block_number) || t.block_time;
+      }
+
       const { error: insertError } = await supabase
         .from("cca_transfers")
         .upsert(newTransfers, { onConflict: "tx_hash" });

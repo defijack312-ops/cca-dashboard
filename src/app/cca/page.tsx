@@ -87,7 +87,7 @@ export default function CCADashboard() {
         .from("cca_wallets")
         .select("address, total_usdc, bid_count, last_bid_time")
         .order("total_usdc", { ascending: false })
-        .limit(25);
+        .limit(100);
 
       if (walletData) {
         setWallets(walletData as WalletRow[]);
@@ -279,7 +279,7 @@ export default function CCADashboard() {
                 Leaderboard
               </h2>
               <p className="text-[10px] font-mono text-gray-600 mt-0.5 tracking-wider uppercase">
-                Top 25 wallets by USDC contributed
+                Top 100 wallets by USDC contributed
               </p>
             </div>
             <span className="text-xs font-mono text-gray-700">
