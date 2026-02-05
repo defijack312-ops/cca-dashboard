@@ -469,10 +469,10 @@ export default function CCADashboard() {
                             {formatUsd(wallet.total_usdc)}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-right font-mono text-sm text-gray-500">
+                        <td className="px-5 py-3.5 text-right font-mono text-sm text-gray-300">
                           {formatNumber(wallet.bid_count)}
                         </td>
-                        <td className="px-5 py-3.5 text-right font-mono text-sm text-gray-500">
+                        <td className="px-5 py-3.5 text-right font-mono text-sm text-gray-300">
                           {wallet.last_bid_time ? timeAgo(wallet.last_bid_time) : "—"}
                         </td>
                         <td className="px-5 py-3.5 text-right">
@@ -486,7 +486,7 @@ export default function CCADashboard() {
                                 }}
                               />
                             </div>
-                            <span className="font-mono text-xs text-gray-500 w-12 text-right">
+                            <span className="font-mono text-xs text-gray-300 w-12 text-right">
                               {formatPct(share)}
                             </span>
                           </div>
