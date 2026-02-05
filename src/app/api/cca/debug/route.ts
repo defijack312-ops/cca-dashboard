@@ -44,10 +44,28 @@ export async function GET(request: NextRequest) {
     .select("*")
     .limit(3);
 
+  // Try inserting a test transfer with all possible column combos
+  const testRow = {
+    tx_hash: "0xTEST",
+    block_number: 0,
+    wallet: "0xtest",
+    usdc_amount: 1.0,
+    raw_amount: "1000000",
+    timestamp: new Date().toISOString(),
+  };
+  const { error: fullInsErr } = await sb.from("cca_transfers").upsert(testRow, { onConflict: "tx_hash" });
+  
+  // Without raw_amount
+  const { tx_hash, block_number, wallet, usdc_amount, timestamp } = testRow;
+  const testRow2 = { tx_hash: "0xTEST2", block_number, wallet, usdc_amount, timestamp };
+  const { data: noRawData, error: noRawErr } = await sb.from("cca_transfers").upsert(testRow2, { onConflict: "tx_hash" }).select();
+
   return NextResponse.json({
     syncState: { data: syncData, error: syncError?.message || null },
     insertWithId: { data: testInsert, error: insertError?.message || null },
     insertWithKey: { data: testInsert2, error: insertError2?.message || null },
     transfers: { data: transferData, error: transferError?.message || null },
+    transferInsertFull: { error: fullInsErr?.message || null },
+    transferInsertNoRaw: { data: noRawData, error: noRawErr?.message || null },
   });
 }

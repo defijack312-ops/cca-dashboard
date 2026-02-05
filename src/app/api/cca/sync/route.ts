@@ -129,7 +129,6 @@ export async function GET(request: NextRequest) {
               block_number: Number(log.blockNumber),
               wallet: from.toLowerCase(),
               usdc_amount: usdcAmount,
-              raw_amount: rawValue.toString(),
               timestamp: new Date().toISOString(),
             });
           }
