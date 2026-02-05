@@ -171,8 +171,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregate per-wallet stats
-    const { data: allTransfers } = await supabase
-      .from("cca_transfers").select("from_address, amount_usdc, block_time");
+    // Fetch ALL transfers (Supabase default limit is 1000)
+    let allTransfers: any[] = [];
+    let from = 0;
+    const PAGE_SIZE = 1000;
+    while (true) {
+      const { data: page } = await supabase
+        .from("cca_transfers")
+        .select("from_address, amount_usdc, block_time")
+        .range(from, from + PAGE_SIZE - 1);
+      if (!page || page.length === 0) break;
+      allTransfers = allTransfers.concat(page);
+      if (page.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
 
     const transfers = (allTransfers || []) as { from_address: string; amount_usdc: number; block_time: string }[];
     const walletMap = new Map<string, { total: number; count: number; lastBidTime: string }>();
