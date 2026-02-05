@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createPublicClient, http, parseAbiItem, formatUnits } from "viem";
+import { createPublicClient, http, parseAbiItem, formatUnits, encodePacked, keccak256, namehash } from "viem";
 import { base, mainnet } from "viem/chains";
 
 const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
@@ -39,19 +39,47 @@ function getMainnetClient() {
   return createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
 }
 
+const BASENAME_L2_RESOLVER = "0xC6d566A56A1aFf6508b41f6c90ff131615583BCD";
+
+const L2_RESOLVER_NAME_ABI = [
+  {
+    inputs: [{ name: "node", type: "bytes32" }],
+    name: "name",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+function convertReverseNodeToBytes(address: string, chainId: number): `0x${string}` {
+  const addressFormatted = address.toLowerCase();
+  const addressNode = keccak256(addressFormatted.substring(2) as `0x${string}`);
+  // For Base (chainId 8453), compute coinType hex
+  const cointype = (0x80000000 | chainId) >>> 0;
+  const chainCoinType = cointype.toString(16).toUpperCase();
+  const baseReverseNode = namehash(`${chainCoinType}.reverse`);
+  const addressReverseNode = keccak256(
+    encodePacked(["bytes32", "bytes32"], [baseReverseNode as `0x${string}`, addressNode])
+  );
+  return addressReverseNode;
+}
+
 async function resolveEnsName(address: string, baseClient: any, mainnetClient: any): Promise<string | null> {
-  // 1. Try Base (Basenames like xxx.base.eth)
+  // 1. Try Base (Basenames like xxx.base.eth) via L2 Resolver
   try {
-    const baseName = await baseClient.getEnsName({
-      address: address as `0x${string}`,
-      universalResolverAddress: "0xC6d566A56A1aFf6508b41f6c90ff131615583BCD",
+    const reverseNode = convertReverseNodeToBytes(address, 8453); // Base chainId
+    const baseName = await baseClient.readContract({
+      abi: L2_RESOLVER_NAME_ABI,
+      address: BASENAME_L2_RESOLVER,
+      functionName: "name",
+      args: [reverseNode],
     });
-    if (baseName) return baseName;
+    if (baseName && typeof baseName === "string" && baseName.length > 0) return baseName;
   } catch {
     // No Basename found, continue
   }
 
-  // 2. Try Ethereum mainnet ENS
+  // 2. Try Ethereum mainnet ENS (standard reverse resolution)
   if (mainnetClient) {
     try {
       const ensName = await mainnetClient.getEnsName({
