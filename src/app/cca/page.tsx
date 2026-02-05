@@ -380,7 +380,7 @@ export default function CCADashboard() {
                       </span>
                       <span className="text-blue-900 text-sm">{card.icon}</span>
                     </div>
-                    <div className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                    <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                       {card.value}
                     </div>
                     {card.href && (
