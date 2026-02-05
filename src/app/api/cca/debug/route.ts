@@ -16,52 +16,64 @@ export async function GET(request: NextRequest) {
 
   const results: Record<string, any> = {};
 
-  // Test combos for cca_transfers
-  const combos = [
-    { label: "tx_hash+block_number+wallet+usdc_amount", row: { tx_hash: "0xT1", block_number: 1, wallet: "0xw", usdc_amount: 1.0 }},
-    { label: "tx_hash+block+wallet+amount", row: { tx_hash: "0xT2", block: 1, wallet: "0xw", amount: 1.0 }},
-    { label: "tx_hash+block_number+from_address+usdc_amount", row: { tx_hash: "0xT3", block_number: 1, from_address: "0xw", usdc_amount: 1.0 }},
-    { label: "tx_hash+block_number+wallet+usdc_amount+created_at", row: { tx_hash: "0xT4", block_number: 1, wallet: "0xw", usdc_amount: 1.0, created_at: new Date().toISOString() }},
-    { label: "just_tx_hash", row: { tx_hash: "0xT5" }},
-    { label: "tx_hash+wallet+usdc_amount", row: { tx_hash: "0xT6", wallet: "0xw", usdc_amount: 1.0 }},
+  // We know tx_hash and block_number exist. Try common column names one at a time.
+  const transferCols = [
+    "wallet", "from_address", "from_wallet", "sender", "from_addr", "address",
+    "usdc_amount", "amount", "value", "usdc_value", "transfer_amount",
+    "timestamp", "created_at", "block_timestamp", "time", "transferred_at",
+    "raw_amount", "raw_value",
+    "to_address", "to_wallet", "recipient",
+    "log_index", "tx_index",
   ];
 
-  for (const c of combos) {
-    const { error } = await sb.from("cca_transfers").upsert(c.row, { onConflict: "tx_hash" });
-    results[c.label] = error?.message || "OK";
+  for (const col of transferCols) {
+    const row: any = { tx_hash: `0xProbe_${col}`, block_number: 1 };
+    row[col] = col.includes("amount") || col.includes("value") ? 1.0 : "test";
+    const { error } = await sb.from("cca_transfers").upsert(row, { onConflict: "tx_hash" });
+    if (error?.message?.includes("schema cache")) {
+      results[`transfers.${col}`] = "NOT FOUND";
+    } else if (error) {
+      results[`transfers.${col}`] = `EXISTS (err: ${error.message})`;
+    } else {
+      results[`transfers.${col}`] = "EXISTS - OK";
+    }
   }
 
-  // Also check cca_wallets columns
-  const walletCombos = [
-    { label: "wallet+total_usdc+bid_count+avg_bid", row: { wallet: "0xWt1", total_usdc: 1, bid_count: 1, avg_bid: 1, updated_at: new Date().toISOString() }},
-    { label: "wallet+total_usdc+bid_count", row: { wallet: "0xWt2", total_usdc: 1, bid_count: 1 }},
-  ];
-
-  for (const c of walletCombos) {
-    const { error } = await sb.from("cca_wallets").upsert(c.row, { onConflict: "wallet" });
-    results["wallets_" + c.label] = error?.message || "OK";
+  // Same for cca_wallets - try common PK names
+  const walletPKs = ["wallet", "address", "wallet_address", "id", "addr"];
+  for (const col of walletPKs) {
+    const row: any = {};
+    row[col] = "0xProbeWallet";
+    const { error } = await sb.from("cca_wallets").insert(row);
+    if (error?.message?.includes("schema cache")) {
+      results[`wallets.${col}`] = "NOT FOUND";
+    } else if (error) {
+      results[`wallets.${col}`] = `EXISTS (err: ${error.message})`;
+    } else {
+      results[`wallets.${col}`] = "EXISTS - OK";
+    }
   }
 
-  // Check cca_stats_latest columns
-  const statsCombos = [
-    { label: "full_stats", row: {
-      id: "test", total_usdc: 1, total_bids: 1, unique_wallets: 1,
-      avg_bid: 1, median_bid: 1, pct_bids_lt_50: 0, pct_bids_lt_100: 0,
-      top10_share: 0, top50_share: 0, last_processed_block: 1, updated_at: new Date().toISOString()
-    }},
-    { label: "minimal_stats", row: { id: "test2", total_usdc: 1, updated_at: new Date().toISOString() }},
-  ];
-
-  for (const c of statsCombos) {
-    const { error } = await sb.from("cca_stats_latest").upsert(c.row, { onConflict: "id" });
-    results["stats_" + c.label] = error?.message || "OK";
+  const walletCols = ["total_usdc", "total_amount", "total_value", "bid_count", "num_bids", "count", "avg_bid", "average_bid", "updated_at", "created_at"];
+  for (const col of walletCols) {
+    // Use 'id' as PK guess for now
+    const row: any = { id: `probe_${col}` };
+    row[col] = typeof col === "string" && col.includes("at") ? new Date().toISOString() : 1;
+    const { error } = await sb.from("cca_wallets").upsert(row, { onConflict: "id" });
+    if (error?.message?.includes("schema cache")) {
+      results[`wallets.${col}`] = "NOT FOUND";
+    } else if (error) {
+      results[`wallets.${col}`] = `EXISTS (err: ${error.message})`;
+    } else {
+      results[`wallets.${col}`] = "EXISTS - OK";
+    }
   }
 
-  // Clean up test rows
-  await sb.from("cca_transfers").delete().in("tx_hash", ["0xT1","0xT2","0xT3","0xT4","0xT5","0xT6","0xTEST","0xTEST2"]);
-  await sb.from("cca_sync_state").delete().eq("id", "test_debug");
-  await sb.from("cca_wallets").delete().in("wallet", ["0xWt1","0xWt2"]);
-  await sb.from("cca_stats_latest").delete().in("id", ["test","test2"]);
+  // Clean up probes
+  await sb.from("cca_transfers").delete().like("tx_hash", "0xProbe_%");
+  await sb.from("cca_wallets").delete().like("id", "probe_%");
+  await sb.from("cca_wallets").delete().eq("address", "0xProbeWallet");
+  await sb.from("cca_wallets").delete().eq("wallet_address", "0xProbeWallet");
 
   return NextResponse.json(results);
 }
