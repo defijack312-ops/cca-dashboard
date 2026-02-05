@@ -14,8 +14,8 @@ import { base } from "viem/chains";
 const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
 const USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
-const CHUNK_SIZE = 100;       // Blocks per getLogs call
-const CHUNKS_PER_CALL = 50;   // Process 5000 blocks per API call
+const CHUNK_SIZE = 10;        // Blocks per getLogs call (Alchemy free tier safe)
+const CHUNKS_PER_CALL = 50;   // Process 500 blocks per API call
 const SYNC_STATE_ID = "base_usdc_to_cca";
 // Contract was deployed at block ~41610525
 const GENESIS_BLOCK = BigInt(41610000);
@@ -68,6 +68,16 @@ export async function GET(request: NextRequest) {
 
     const supabase: any = getSupabaseAdmin();
     const viemClient = getViemClient();
+
+    // Allow reset via ?reset=BLOCK_NUMBER
+    const resetBlock = searchParams.get("reset");
+    if (resetBlock) {
+      const block = parseInt(resetBlock, 10);
+      if (!isNaN(block)) {
+        await saveLastProcessedBlock(supabase, BigInt(block));
+        return NextResponse.json({ success: true, message: `Reset sync to block ${block}` });
+      }
+    }
 
     const lastProcessedBlock = await getLastProcessedBlock(supabase);
     const currentBlock = await viemClient.getBlockNumber();
