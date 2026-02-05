@@ -14,8 +14,8 @@ import { base } from "viem/chains";
 const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
 const USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const USDC_DECIMALS = 6;
-const CHUNK_SIZE = 10;        // Blocks per getLogs call (Alchemy free tier safe)
-const CHUNKS_PER_CALL = 50;   // Process 500 blocks per API call
+const CHUNK_SIZE = 2000;      // Blocks per getLogs call (pay-as-you-go Alchemy)
+const CHUNKS_PER_CALL = 100;  // Process 200k blocks per API call
 const SYNC_STATE_ID = "base_usdc_to_cca";
 // Contract was deployed at block ~41610525
 const GENESIS_BLOCK = BigInt(41610000);
