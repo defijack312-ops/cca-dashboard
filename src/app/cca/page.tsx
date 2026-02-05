@@ -27,6 +27,7 @@ interface WalletRow {
   total_usdc: number;
   bid_count: number;
   last_bid_time: string | null;
+  ens_name: string | null;
 }
 
 // ─── Helper: Format numbers nicely ──────────────────────────
@@ -85,7 +86,7 @@ export default function CCADashboard() {
 
       const { data: walletData } = await supabase
         .from("cca_wallets")
-        .select("address, total_usdc, bid_count, last_bid_time")
+        .select("address, total_usdc, bid_count, last_bid_time, ens_name")
         .order("total_usdc", { ascending: false })
         .limit(100);
 
@@ -335,7 +336,9 @@ export default function CCADashboard() {
                             className="font-mono text-sm text-gray-400 hover:text-cyan-400 transition-colors"
                             title={wallet.address}
                           >
-                            {shortenAddress(wallet.address)}
+                            {wallet.ens_name && wallet.ens_name !== "_none"
+                              ? <span className="text-cyan-300">{wallet.ens_name}</span>
+                              : shortenAddress(wallet.address)}
                             <span className="text-gray-700 group-hover:text-gray-500 ml-1.5 text-[10px]">
                               ↗
                             </span>

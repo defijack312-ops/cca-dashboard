@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createPublicClient, http, parseAbiItem, formatUnits } from "viem";
-import { base } from "viem/chains";
+import { base, mainnet } from "viem/chains";
 
 const CCA_CONTRACT = "0x7e867b47a94df05188c08575e8B9a52F3F69c469";
 const USDC_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -31,6 +31,39 @@ function getViemClient() {
   const rpcUrl = process.env.BASE_RPC_URL;
   if (!rpcUrl) throw new Error("Missing BASE_RPC_URL");
   return createPublicClient({ chain: base, transport: http(rpcUrl) });
+}
+
+function getMainnetClient() {
+  const rpcUrl = process.env.ETH_MAINNET_RPC_URL;
+  if (!rpcUrl) return null;
+  return createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
+}
+
+async function resolveEnsName(address: string, baseClient: any, mainnetClient: any): Promise<string | null> {
+  // 1. Try Base (Basenames like xxx.base.eth)
+  try {
+    const baseName = await baseClient.getEnsName({
+      address: address as `0x${string}`,
+      universalResolverAddress: "0xC6d566A56A1aFf6508b41f6c90ff131615583BCD",
+    });
+    if (baseName) return baseName;
+  } catch {
+    // No Basename found, continue
+  }
+
+  // 2. Try Ethereum mainnet ENS
+  if (mainnetClient) {
+    try {
+      const ensName = await mainnetClient.getEnsName({
+        address: address as `0x${string}`,
+      });
+      if (ensName) return ensName;
+    } catch {
+      // No ENS found
+    }
+  }
+
+  return null;
 }
 
 async function getLastProcessedBlock(sb: any): Promise<bigint> {
@@ -232,6 +265,36 @@ export async function GET(request: NextRequest) {
       for (let i = 0; i < walletRows.length; i += 500) {
         await supabase.from("cca_wallets").upsert(walletRows.slice(i, i + 500), { onConflict: "address" });
       }
+    }
+
+    // Resolve ENS names for wallets that don't have one yet
+    const { data: unresolvedWallets } = await supabase
+      .from("cca_wallets")
+      .select("address")
+      .is("ens_name", null)
+      .order("total_usdc", { ascending: false })
+      .limit(50); // Resolve top 50 by value each sync
+
+    if (unresolvedWallets && unresolvedWallets.length > 0) {
+      const mainnetClient = getMainnetClient();
+      let ensResolved = 0;
+
+      for (const w of unresolvedWallets) {
+        const ensName = await resolveEnsName(w.address, viemClient, mainnetClient);
+        // Store result: ENS name if found, "_none" if no name (so we don't re-check)
+        await supabase
+          .from("cca_wallets")
+          .update({ ens_name: ensName || "_none" })
+          .eq("address", w.address);
+        if (ensName) ensResolved++;
+
+        // Rate limit protection: small delay every 5 lookups
+        if (unresolvedWallets.indexOf(w) % 5 === 4) {
+          await new Promise(r => setTimeout(r, 300));
+        }
+      }
+
+      console.log(`ENS resolution: ${ensResolved} names found out of ${unresolvedWallets.length} checked`);
     }
 
     // Compute global stats
