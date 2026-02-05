@@ -71,6 +71,9 @@ export default function CCADashboard() {
   const [loading, setLoading] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [countdown, setCountdown] = useState(60);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResult, setSearchResult] = useState<{ found: boolean; rank?: number; message?: string } | null>(null);
+  const [highlightedRank, setHighlightedRank] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -115,6 +118,36 @@ export default function CCADashboard() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleSearch = () => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) {
+      setSearchResult(null);
+      setHighlightedRank(null);
+      return;
+    }
+    const index = wallets.findIndex(
+      (w) =>
+        w.address.toLowerCase() === q ||
+        w.address.toLowerCase().startsWith(q) ||
+        (w.ens_name && w.ens_name !== "_none" && w.ens_name.toLowerCase().includes(q))
+    );
+    if (index !== -1) {
+      const rank = index + 1;
+      setSearchResult({ found: true, rank });
+      setHighlightedRank(rank);
+      // Scroll to the row
+      setTimeout(() => {
+        const row = document.getElementById(`wallet-row-${rank}`);
+        if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+      // Clear highlight after 5s
+      setTimeout(() => setHighlightedRank(null), 5000);
+    } else {
+      setSearchResult({ found: false, message: "Wallet not found in top 1,000. They may not have bid yet or are ranked lower." });
+      setHighlightedRank(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -274,18 +307,53 @@ export default function CCADashboard() {
 
         {/* ── Leaderboard ──────────────────────────────────── */}
         <div className="rounded-xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800/60 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold tracking-wide text-gray-200">
-                Leaderboard
-              </h2>
-              <p className="text-[10px] font-mono text-gray-600 mt-0.5 tracking-wider uppercase">
-                All Wallets wallets by USDC contributed
-              </p>
+          <div className="px-5 py-4 border-b border-gray-800/60">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h2 className="text-sm font-semibold tracking-wide text-gray-200">
+                  Leaderboard
+                </h2>
+                <p className="text-[10px] font-mono text-gray-600 mt-0.5 tracking-wider uppercase">
+                  All wallets by USDC contributed
+                </p>
+              </div>
+              <span className="text-xs font-mono text-gray-700">
+                {wallets.length} wallets
+              </span>
             </div>
-            <span className="text-xs font-mono text-gray-700">
-              {wallets.length} wallets
-            </span>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-md">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  placeholder="Search by address or ENS name..."
+                  className="w-full bg-gray-800/60 border border-gray-700/60 rounded-lg px-3 py-2 text-sm font-mono text-gray-300 placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-sm font-mono hover:bg-cyan-500/20 transition-colors"
+              >
+                Find
+              </button>
+              {searchQuery && (
+                <button
+                  onClick={() => { setSearchQuery(""); setSearchResult(null); setHighlightedRank(null); }}
+                  className="px-3 py-2 rounded-lg border border-gray-700/60 text-gray-500 text-sm font-mono hover:text-gray-300 transition-colors"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {searchResult && (
+              <div className={`mt-2 text-xs font-mono ${searchResult.found ? "text-cyan-400" : "text-amber-400"}`}>
+                {searchResult.found
+                  ? `Found at rank #${searchResult.rank}`
+                  : searchResult.message}
+              </div>
+            )}
           </div>
 
           {wallets.length > 0 ? (
@@ -312,7 +380,12 @@ export default function CCADashboard() {
                     return (
                       <tr
                         key={wallet.address}
-                        className="hover:bg-gray-800/30 transition-colors group"
+                        id={`wallet-row-${index + 1}`}
+                        className={`transition-all duration-500 group ${
+                          highlightedRank === index + 1
+                            ? "bg-cyan-500/10 ring-1 ring-cyan-500/30"
+                            : "hover:bg-gray-800/30"
+                        }`}
                       >
                         <td className="px-5 py-3.5">
                           <span
