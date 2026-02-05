@@ -3,12 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── Supabase Client (uses PUBLIC keys — safe for browser) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ─── Types ───────────────────────────────────────────────────
 interface Stats {
   total_usdc: number;
   total_bids: number;
@@ -30,14 +28,9 @@ interface WalletRow {
   ens_name: string | null;
 }
 
-// ─── Helper: Format numbers nicely ──────────────────────────
 function formatUsd(value: number): string {
-  if (value >= 1_000_000) {
-    return `$${(value / 1_000_000).toFixed(2)}M`;
-  }
-  if (value >= 1_000) {
-    return `$${(value / 1_000).toFixed(1)}K`;
-  }
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
   return `$${value.toFixed(2)}`;
 }
 
@@ -57,14 +50,14 @@ function timeAgo(dateString: string): string {
   const now = new Date();
   const then = new Date(dateString);
   const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
-
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-// ─── Main Component ──────────────────────────────────────────
+const AUCTION_URL = "https://app.uniswap.org/explore/auctions/base/0x7e867b47a94df05188c08575e8B9a52F3F69c469";
+
 export default function CCADashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [wallets, setWallets] = useState<WalletRow[]>([]);
@@ -82,20 +75,14 @@ export default function CCADashboard() {
         .select("*")
         .eq("id", "base_usdc_to_cca")
         .single();
-
-      if (statsData) {
-        setStats(statsData as Stats);
-      }
+      if (statsData) setStats(statsData as Stats);
 
       const { data: walletData } = await supabase
         .from("cca_wallets")
         .select("address, total_usdc, bid_count, last_bid_time, ens_name")
         .order("total_usdc", { ascending: false })
-        .limit(5000); // Show all wallets;
-
-      if (walletData) {
-        setWallets(walletData as WalletRow[]);
-      }
+        .limit(5000);
+      if (walletData) setWallets(walletData as WalletRow[]);
 
       setLastFetch(new Date());
       setCountdown(60);
@@ -106,26 +93,12 @@ export default function CCADashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 60_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => (prev > 0 ? prev - 1 : 60));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  useEffect(() => { fetchData(); const i = setInterval(fetchData, 60_000); return () => clearInterval(i); }, [fetchData]);
+  useEffect(() => { const t = setInterval(() => setCountdown((p) => (p > 0 ? p - 1 : 60)), 1000); return () => clearInterval(t); }, []);
 
   const handleSearch = () => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) {
-      setSearchResult(null);
-      setHighlightedRank(null);
-      return;
-    }
+    if (!q) { setSearchResult(null); setHighlightedRank(null); return; }
     const index = wallets.findIndex(
       (w) =>
         w.address.toLowerCase() === q ||
@@ -136,12 +109,7 @@ export default function CCADashboard() {
       const rank = index + 1;
       setSearchResult({ found: true, rank });
       setHighlightedRank(rank);
-      // Scroll to the row
-      setTimeout(() => {
-        const row = document.getElementById(`wallet-row-${rank}`);
-        if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 100);
-      // Clear highlight after 5s
+      setTimeout(() => { const row = document.getElementById(`wallet-row-${rank}`); if (row) row.scrollIntoView({ behavior: "smooth", block: "center" }); }, 100);
       setTimeout(() => setHighlightedRank(null), 5000);
     } else {
       setSearchResult({ found: false, message: "Wallet not found in top 1,000. They may not have bid yet or are ranked lower." });
@@ -151,9 +119,9 @@ export default function CCADashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-2 border-orange-500/30 border-t-yellow-400 rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-400 font-mono text-sm tracking-widest uppercase">
             Loading auction data...
           </p>
@@ -164,90 +132,62 @@ export default function CCADashboard() {
 
   const statCards = stats
     ? [
-        {
-          label: "Total USDC",
-          value: formatUsd(stats.total_usdc),
-          accent: "from-cyan-500 to-blue-600",
-          glow: "shadow-cyan-500/20",
-          icon: "◆",
-        },
-        {
-          label: "Total Bids",
-          value: formatNumber(stats.total_bids),
-          accent: "from-emerald-500 to-teal-600",
-          glow: "shadow-emerald-500/20",
-          icon: "▲",
-        },
-        {
-          label: "Unique Wallets",
-          value: formatNumber(stats.unique_wallets),
-          accent: "from-violet-500 to-purple-600",
-          glow: "shadow-violet-500/20",
-          icon: "●",
-        },
-        {
-          label: "Avg Bid",
-          value: formatUsd(stats.avg_bid),
-          accent: "from-amber-500 to-orange-600",
-          glow: "shadow-amber-500/20",
-          icon: "◈",
-        },
-        {
-          label: "Median Bid",
-          value: formatUsd(stats.median_bid),
-          accent: "from-pink-500 to-rose-600",
-          glow: "shadow-pink-500/20",
-          icon: "◇",
-        },
-        {
-          label: "Bids < $50",
-          value: formatPct(stats.pct_bids_lt_50),
-          accent: "from-sky-500 to-indigo-600",
-          glow: "shadow-sky-500/20",
-          icon: "▽",
-        },
-        {
-          label: "Bids < $100",
-          value: formatPct(stats.pct_bids_lt_100),
-          accent: "from-lime-500 to-green-600",
-          glow: "shadow-lime-500/20",
-          icon: "□",
-        },
-        {
-          label: "Top 10 Share",
-          value: formatPct(stats.top10_share),
-          accent: "from-red-500 to-orange-600",
-          glow: "shadow-red-500/20",
-          icon: "★",
-        },
+        { label: "Total USDC", value: formatUsd(stats.total_usdc), accent: "from-red-500 to-orange-500", glow: "shadow-red-500/20", icon: "◆" },
+        { label: "Total Bids", value: formatNumber(stats.total_bids), accent: "from-orange-500 to-yellow-500", glow: "shadow-orange-500/20", icon: "▲" },
+        { label: "Unique Wallets", value: formatNumber(stats.unique_wallets), accent: "from-yellow-500 to-green-500", glow: "shadow-yellow-500/20", icon: "●" },
+        { label: "Avg Bid", value: formatUsd(stats.avg_bid), accent: "from-green-500 to-emerald-500", glow: "shadow-green-500/20", icon: "◈" },
+        { label: "Median Bid", value: formatUsd(stats.median_bid), accent: "from-emerald-500 to-blue-500", glow: "shadow-emerald-500/20", icon: "◇" },
+        { label: "Bids < $50", value: formatPct(stats.pct_bids_lt_50), accent: "from-blue-500 to-indigo-500", glow: "shadow-blue-500/20", icon: "▽" },
+        { label: "Bids < $100", value: formatPct(stats.pct_bids_lt_100), accent: "from-indigo-500 to-violet-500", glow: "shadow-indigo-500/20", icon: "□" },
+        { label: "Top 10 Share", value: formatPct(stats.top10_share), accent: "from-violet-500 to-fuchsia-500", glow: "shadow-violet-500/20", icon: "★" },
       ]
     : [];
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-gray-100">
+    <div className="min-h-screen bg-[#0a1628] text-gray-100">
+      {/* Subtle dot grid */}
       <div
-        className="fixed inset-0 opacity-[0.03] pointer-events-none"
+        className="fixed inset-0 opacity-[0.02] pointer-events-none"
         style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)`,
           backgroundSize: "32px 32px",
         }}
       />
+      {/* Subtle rainbow glow at top */}
+      <div
+        className="fixed top-0 left-0 right-0 h-1 opacity-60 pointer-events-none"
+        style={{
+          background: "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #8b5cf6, #d946ef)",
+        }}
+      />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* ── Header ───────────────────────────────────────── */}
+        {/* ── Header ─────────────────────────────────────── */}
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
             <span className="text-xs font-mono text-gray-500 tracking-[0.25em] uppercase">
               Live · Base Network
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-            <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-              CCA Auction
-            </span>
-            <span className="text-gray-600 ml-3 text-2xl font-light">
-              Dashboard
+            <a
+              href={AUCTION_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:opacity-80 transition-opacity"
+            >
+              <span
+                className="bg-clip-text text-transparent"
+                style={{
+                  backgroundImage: "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e, #3b82f6, #8b5cf6)",
+                }}
+              >
+                $RNBW CCA
+              </span>
+            </a>
+            <span className="text-gray-500 ml-3 text-2xl font-light">
+              Auction Dashboard
             </span>
           </h1>
           <div className="mt-3 flex items-center gap-4 text-xs font-mono text-gray-600">
@@ -258,14 +198,22 @@ export default function CCADashboard() {
             <span>Next refresh in {countdown}s</span>
             <button
               onClick={fetchData}
-              className="ml-2 px-2 py-0.5 rounded border border-gray-800 hover:border-cyan-800 hover:text-cyan-400 transition-colors"
+              className="ml-2 px-2 py-0.5 rounded border border-gray-700 hover:border-orange-500/60 hover:text-orange-400 transition-colors"
             >
               ↻ Refresh
             </button>
+            <a
+              href={AUCTION_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-2 px-3 py-0.5 rounded border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-colors"
+            >
+              Bid on Uniswap ↗
+            </a>
           </div>
         </div>
 
-        {/* ── Stat Cards ───────────────────────────────────── */}
+        {/* ── Stat Cards ─────────────────────────────────── */}
         {stats ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-10">
             {statCards.map((card) => (
@@ -273,11 +221,11 @@ export default function CCADashboard() {
                 key={card.label}
                 className={`
                   relative overflow-hidden rounded-xl 
-                  bg-gradient-to-br from-gray-900/80 to-gray-900/40
-                  border border-gray-800/60
+                  bg-gradient-to-br from-[#0f1f3a]/80 to-[#0a1628]/40
+                  border border-blue-900/40
                   backdrop-blur-sm
                   shadow-lg ${card.glow}
-                  hover:border-gray-700/80 hover:shadow-xl
+                  hover:border-blue-800/60 hover:shadow-xl
                   transition-all duration-300
                   group
                 `}
@@ -290,7 +238,7 @@ export default function CCADashboard() {
                     <span className="text-[10px] font-mono tracking-[0.2em] uppercase text-gray-500">
                       {card.label}
                     </span>
-                    <span className="text-gray-700 text-sm">{card.icon}</span>
+                    <span className="text-blue-900 text-sm">{card.icon}</span>
                   </div>
                   <div className="text-xl sm:text-2xl font-bold tracking-tight text-white">
                     {card.value}
@@ -305,9 +253,9 @@ export default function CCADashboard() {
           </div>
         )}
 
-        {/* ── Leaderboard ──────────────────────────────────── */}
-        <div className="rounded-xl border border-gray-800/60 bg-gray-900/40 backdrop-blur-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800/60">
+        {/* ── Leaderboard ────────────────────────────────── */}
+        <div className="rounded-xl border border-blue-900/40 bg-[#0f1f3a]/40 backdrop-blur-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-blue-900/40">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-sm font-semibold tracking-wide text-gray-200">
@@ -317,7 +265,7 @@ export default function CCADashboard() {
                   All wallets by USDC contributed
                 </p>
               </div>
-              <span className="text-xs font-mono text-gray-700">
+              <span className="text-xs font-mono text-gray-600">
                 {wallets.length} wallets
               </span>
             </div>
@@ -329,26 +277,26 @@ export default function CCADashboard() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="Search by address or ENS name..."
-                  className="w-full bg-gray-800/60 border border-gray-700/60 rounded-lg px-3 py-2 text-sm font-mono text-gray-300 placeholder-gray-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
+                  className="w-full bg-[#0a1628]/80 border border-blue-900/50 rounded-lg px-3 py-2 text-sm font-mono text-gray-300 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all"
                 />
               </div>
               <button
                 onClick={handleSearch}
-                className="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-sm font-mono hover:bg-cyan-500/20 transition-colors"
+                className="px-4 py-2 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-400 text-sm font-mono hover:bg-orange-500/20 transition-colors"
               >
                 Find
               </button>
               {searchQuery && (
                 <button
                   onClick={() => { setSearchQuery(""); setSearchResult(null); setHighlightedRank(null); }}
-                  className="px-3 py-2 rounded-lg border border-gray-700/60 text-gray-500 text-sm font-mono hover:text-gray-300 transition-colors"
+                  className="px-3 py-2 rounded-lg border border-blue-900/50 text-gray-500 text-sm font-mono hover:text-gray-300 transition-colors"
                 >
                   ✕
                 </button>
               )}
             </div>
             {searchResult && (
-              <div className={`mt-2 text-xs font-mono ${searchResult.found ? "text-cyan-400" : "text-amber-400"}`}>
+              <div className={`mt-2 text-xs font-mono ${searchResult.found ? "text-green-400" : "text-amber-400"}`}>
                 {searchResult.found
                   ? `Found at rank #${searchResult.rank}`
                   : searchResult.message}
@@ -369,7 +317,7 @@ export default function CCADashboard() {
                     <th className="px-5 py-3 text-right">Share</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-800/40">
+                <tbody className="divide-y divide-blue-900/30">
                   {wallets.map((wallet, index) => {
                     const share =
                       stats && stats.total_usdc > 0
@@ -383,8 +331,8 @@ export default function CCADashboard() {
                         id={`wallet-row-${index + 1}`}
                         className={`transition-all duration-500 group ${
                           highlightedRank === index + 1
-                            ? "bg-cyan-500/10 ring-1 ring-cyan-500/30"
-                            : "hover:bg-gray-800/30"
+                            ? "bg-orange-500/10 ring-1 ring-orange-500/30"
+                            : "hover:bg-blue-900/20"
                         }`}
                       >
                         <td className="px-5 py-3.5">
@@ -393,10 +341,13 @@ export default function CCADashboard() {
                               inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-mono
                               ${
                                 isTop3
-                                  ? "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30"
+                                  ? "text-yellow-400 border border-yellow-500/30"
                                   : "text-gray-600"
                               }
                             `}
+                            style={isTop3 ? {
+                              background: "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(249,115,22,0.15), rgba(234,179,8,0.15))",
+                            } : undefined}
                           >
                             {index + 1}
                           </span>
@@ -406,11 +357,11 @@ export default function CCADashboard() {
                             href={`https://basescan.org/address/${wallet.address}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-mono text-sm text-gray-400 hover:text-cyan-400 transition-colors"
+                            className="font-mono text-sm text-gray-400 hover:text-orange-400 transition-colors"
                             title={wallet.address}
                           >
                             {wallet.ens_name && wallet.ens_name !== "_none"
-                              ? <span className="text-cyan-300">{wallet.ens_name}</span>
+                              ? <span className="text-yellow-300">{wallet.ens_name}</span>
                               : shortenAddress(wallet.address)}
                             <span className="text-gray-700 group-hover:text-gray-500 ml-1.5 text-[10px]">
                               ↗
@@ -434,10 +385,13 @@ export default function CCADashboard() {
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <div className="w-16 h-1 rounded-full bg-gray-800 overflow-hidden">
+                            <div className="w-16 h-1 rounded-full bg-blue-900/40 overflow-hidden">
                               <div
-                                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500"
-                                style={{ width: `${Math.min(share, 100)}%` }}
+                                className="h-full rounded-full"
+                                style={{
+                                  background: "linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e)",
+                                  width: `${Math.min(share, 100)}%`,
+                                }}
                               />
                             </div>
                             <span className="font-mono text-xs text-gray-500 w-12 text-right">
@@ -458,15 +412,23 @@ export default function CCADashboard() {
           )}
         </div>
 
-        {/* ── Footer ───────────────────────────────────────── */}
+        {/* ── Footer ─────────────────────────────────────── */}
         <div className="mt-8 text-center">
-          <p className="text-[10px] font-mono text-gray-700 tracking-wider">
-            CCA Contract:{" "}
+          <p className="text-[10px] font-mono text-gray-600 tracking-wider">
+            <a
+              href={AUCTION_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-500 hover:text-orange-400 transition-colors"
+            >
+              $RNBW CCA Auction on Uniswap
+            </a>
+            {" · "}
             <a
               href="https://basescan.org/address/0x7e867b47a94df05188c08575e8B9a52F3F69c469"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-600 hover:text-cyan-500 transition-colors"
+              className="text-gray-600 hover:text-orange-400 transition-colors"
             >
               0x7e86...9469
             </a>
